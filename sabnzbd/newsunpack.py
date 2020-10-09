@@ -30,7 +30,7 @@ import shutil
 import functools
 
 import sabnzbd
-from sabnzbd.encoding import platform_btou, correct_unknown_encoding, ubtou
+from sabnzbd.encoding import platform_btou, correct_unknown_encoding, ubtou, utob
 import sabnzbd.utils.rarfile as rarfile
 from sabnzbd.misc import (
     format_time_string,
@@ -520,6 +520,8 @@ def rar_unpack(nzo: NzbObject, workdir, workdir_complete, delete, one_folder, ra
 
         # Did we already direct-unpack it? Not when recursive-unpacking
         logging.info(nzo.direct_unpacker.success_sets)
+
+        logging.info(utob(rar_set))
         if nzo.direct_unpacker and rar_set in nzo.direct_unpacker.success_sets:
             logging.info("Set %s completed by DirectUnpack", rar_set)
             fail = False

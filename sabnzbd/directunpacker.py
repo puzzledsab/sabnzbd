@@ -32,7 +32,7 @@ import sabnzbd.cfg as cfg
 from sabnzbd.misc import int_conv, format_time_string, build_and_run_command
 from sabnzbd.filesystem import long_path, remove_all, real_path, remove_file
 from sabnzbd.nzbstuff import NzbObject, NzbFile
-from sabnzbd.encoding import platform_btou
+from sabnzbd.encoding import platform_btou, utob
 from sabnzbd.decorators import synchronized
 from sabnzbd.newsunpack import EXTRACTFROM_RE, EXTRACTED_RE, rar_volumelist
 from sabnzbd.postproc import prepare_extraction_path
@@ -231,6 +231,7 @@ class DirectUnpacker(threading.Thread):
                         extracted,
                     )
                     logging.info("DirectUnpack completed for %s", self.cur_setname)
+                    logging.info(utob(self.cur_setname))
                     self.nzo.set_action_line(T("Direct Unpack"), T("Completed"))
 
                     # List success in history-info
