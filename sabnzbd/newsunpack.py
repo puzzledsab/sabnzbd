@@ -475,6 +475,7 @@ def rar_unpack(nzo: NzbObject, workdir, workdir_complete, delete, one_folder, ra
     newfiles = extracted_files = []
     rar_sets = {}
     for rar in rars:
+        logging.info(utob(rar))
         rar_set = setname_from_path(rar)
         if RAR_RE_V3.search(rar_set):
             # Remove the ".partXX" part

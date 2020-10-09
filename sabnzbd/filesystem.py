@@ -644,8 +644,8 @@ def listdir_full(input_dir: str, recursive: bool = True) -> List[str]:
     for root, dirs, files in os.walk(input_dir):
         for file in files:
             if ".AppleDouble" not in root and ".DS_Store" not in root:
-                p = os.path.join(root, file)
-                filelist.append(p)
+                # Make sure we also correct unicode problems
+                filelist.append(normalize_unicode(os.path.join(root, file)))
         if not recursive:
             break
     return filelist

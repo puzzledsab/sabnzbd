@@ -59,7 +59,7 @@ def platform_btou(str_in: AnyStr) -> str:
 def normalize_unicode(str_in: str):
     """Normalize a string to common unicode.
     Needed for example on macOS, which returns
-    non-normalized UFT-8 for things like os.listdir"""
+    non-normalized UFT-8 for things like os.listdir/os.walk"""
     return unicodedata.normalize("NFC", str_in)
 
 

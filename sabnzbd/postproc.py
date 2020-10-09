@@ -450,7 +450,7 @@ def process_job(nzo: NzbObject):
                 for root, _dirs, files in os.walk(workdir):
                     if not root.endswith(JOB_ADMIN):
                         for file_ in files:
-                            path = os.path.join(root, file_)
+                            path = encoding.normalize_unicode(os.path.join(root, file_))
                             new_path = path.replace(workdir, tmp_workdir_complete)
                             ok, new_path = move_to_path(path, new_path)
                             if new_path:
