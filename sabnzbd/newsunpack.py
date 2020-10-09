@@ -519,6 +519,7 @@ def rar_unpack(nzo: NzbObject, workdir, workdir_complete, delete, one_folder, ra
                 last_stats = nzo.direct_unpacker.get_formatted_stats()
 
         # Did we already direct-unpack it? Not when recursive-unpacking
+        logging.info(nzo.direct_unpacker.success_sets)
         if nzo.direct_unpacker and rar_set in nzo.direct_unpacker.success_sets:
             logging.info("Set %s completed by DirectUnpack", rar_set)
             fail = False
