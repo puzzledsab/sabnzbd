@@ -20,6 +20,7 @@ sabnzbd.encoding - Unicode/byte translation functions
 """
 
 import locale
+import unicodedata
 import chardet
 from xml.sax.saxutils import escape
 from typing import AnyStr
@@ -55,6 +56,13 @@ def platform_btou(str_in: AnyStr) -> str:
         return str_in
 
 
+def normalize_unicode(str_in: str):
+    """Normalize a string to common unicode.
+    Needed for example on macOS, which returns
+    non-normalized UFT-8 for things like os.listdir"""
+    return unicodedata.normalize("NFC", str_in)
+
+
 def correct_unknown_encoding(str_or_bytes_in: AnyStr) -> str:
     """Files created on Windows but unpacked/repaired on
     linux can result in invalid filenames. Try to fix this
@@ -67,14 +75,17 @@ def correct_unknown_encoding(str_or_bytes_in: AnyStr) -> str:
 
     # Try simple bytes-to-string
     try:
-        return ubtou(str_or_bytes_in)
+        out_str = ubtou(str_or_bytes_in)
     except UnicodeDecodeError:
         try:
             # Try using 8-bit ASCII, if came from Windows
-            return str_or_bytes_in.decode("ISO-8859-1")
+            out_str = str_or_bytes_in.decode("ISO-8859-1")
         except ValueError:
             # Last resort we use the slow chardet package
-            return str_or_bytes_in.decode(chardet.detect(str_or_bytes_in)["encoding"])
+            out_str = str_or_bytes_in.decode(chardet.detect(str_or_bytes_in)["encoding"])
+
+    # Make sure we normalize it to the common UTF-8 form
+    return normalize_unicode(out_str)
 
 
 def xml_name(p):

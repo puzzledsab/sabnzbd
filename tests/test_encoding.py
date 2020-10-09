@@ -23,6 +23,13 @@ import sabnzbd.encoding as enc
 
 
 class TestEncoding:
+    def test_normalize_unicode(self):
+        """Both write "frènch_german_demö", but they are not the same.."""
+        str1 = enc.ubtou(b"fre\xcc\x80nch_german_demo\xcc\x88")
+        str2 = enc.ubtou(b"fr\xc3\xa8nch_german_dem\xc3\xb6")
+        assert str1 != str2
+        assert enc.normalize_unicode(str1) == enc.normalize_unicode(str2)
+
     def test_correct_unknown_encoding(self):
         # Windows encoding in bytes
         assert "frènch_german_demö" == enc.correct_unknown_encoding(b"fr\xe8nch_german_dem\xf6")

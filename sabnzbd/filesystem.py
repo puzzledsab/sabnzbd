@@ -39,7 +39,7 @@ except ImportError:
 import sabnzbd
 from sabnzbd.decorators import synchronized
 from sabnzbd.constants import FUTURE_Q_FOLDER, JOB_ADMIN, GIGI
-from sabnzbd.encoding import correct_unknown_encoding
+from sabnzbd.encoding import correct_unknown_encoding, normalize_unicode
 from sabnzbd.utils import rarfile
 
 
@@ -429,7 +429,7 @@ def globber(path: str, pattern: str = "*") -> List[str]:
     """ Return matching base file/folder names in folder `path` """
     # Cannot use glob.glob() because it doesn't support Windows long name notation
     if os.path.exists(path):
-        return [f for f in os.listdir(path) if safe_fnmatch(f, pattern)]
+        return [normalize_unicode(f) for f in os.listdir(path) if safe_fnmatch(f, pattern)]
     return []
 
 
@@ -437,7 +437,7 @@ def globber_full(path: str, pattern: str = "*") -> List[str]:
     """ Return matching full file/folder names in folder `path` """
     # Cannot use glob.glob() because it doesn't support Windows long name notation
     if os.path.exists(path):
-        return [os.path.join(path, f) for f in os.listdir(path) if safe_fnmatch(f, pattern)]
+        return [normalize_unicode(os.path.join(path, f)) for f in os.listdir(path) if safe_fnmatch(f, pattern)]
     return []
 
 
@@ -446,7 +446,7 @@ def fix_unix_encoding(folder: str):
     This happens for example when files are created
     on Windows but unpacked/repaired on linux
     """
-    if not sabnzbd.WIN32 and not sabnzbd.DARWIN:
+    if not sabnzbd.WIN32:
         for root, dirs, files in os.walk(folder):
             for name in files:
                 new_name = correct_unknown_encoding(name)
