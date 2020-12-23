@@ -10,7 +10,7 @@ jobs:
       matrix:
         include:
           - name: macOS
-            os: macos-latest
+            os: macos-11.0
             python-version: 3.9
           - name: Windows
             os: windows-latest
@@ -21,7 +21,7 @@ jobs:
       name: Set Xcode version
       if: runner.os == 'macOS'
       with:
-        xcode-version: '11.3.1'
+        xcode-version: '12.3'
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v2
