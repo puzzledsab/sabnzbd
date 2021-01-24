@@ -23,8 +23,9 @@ import gzip
 import time
 import logging
 import hashlib
-import xml.etree.ElementTree
+#import xml.etree.ElementTree
 import datetime
+import re
 
 import sabnzbd
 from sabnzbd import filesystem, nzbstuff
@@ -35,8 +36,6 @@ from sabnzbd.misc import name_to_cat
 
 def nzbfile_parser(raw_data, nzo):
     # Load data as file-object
-    raw_data = raw_data.replace("http://www.newzbin.com/DTD/2003/nzb", "", 1)
-    nzb_tree = xml.etree.ElementTree.fromstring(raw_data)
 
     # Hash for dupe-checking
     md5sum = hashlib.md5()
@@ -49,98 +48,122 @@ def nzbfile_parser(raw_data, nzo):
     skipped_files = 0
     valid_files = 0
 
-    # Parse the header
-    if nzb_tree.find("head"):
-        for meta in nzb_tree.find("head").iter("meta"):
-            meta_type = meta.attrib.get("type")
-            if meta_type and meta.text:
+    metare = re.compile('<meta type="(.*?)">(.*?)</meta>')
+    filere = re.compile('<file(.*?)>')
+    fileendre = re.compile('</file>')
+    subjectre = re.compile(' subject="(.*?)"')
+    datere = re.compile(' date="(.*?)"')
+    groupre = re.compile('<group>(.*?)</group>')
+
+    segmentre = re.compile('<segment( .*?)>(.*?)</segment>')
+    bytesre = re.compile(' bytes="(.*?)"')
+    numberre = re.compile(' number="(.*?)"')
+
+    for line in raw_data.splitlines():
+        #logging.debug("line: %s", line)
+        res = segmentre.search(line)
+        if res:
+            #logging.debug("segment %s, line %s", res.group(2), line)
+            try:
+                article_id = res.group(2)
+                segment_size = int(bytesre.search(res.group(1)).group(1))
+                partnum = int(numberre.search(res.group(1)).group(1))
+                #logging.debug("id %s, size %s, number %s", article_id, segment_size, partnum)
+
+                # Update hash
+                md5sum.update(utob(article_id))
+
+                # Duplicate parts?
+                if partnum in raw_article_db:
+                    if article_id != raw_article_db[partnum][0]:
+                        logging.info(
+                            "Duplicate part %s, but different ID-s (%s // %s)",
+                            partnum,
+                            raw_article_db[partnum][0],
+                            article_id,
+                        )
+                        nzo.increase_bad_articles_counter("duplicate_articles")
+                    else:
+                        logging.info("Skipping duplicate article (%s)", article_id)
+                elif segment_size <= 0 or segment_size >= 2 ** 23:
+                    # Perform sanity check (not negative, 0 or larger than 8MB) on article size
+                    # We use this value later to allocate memory in cache and sabyenc
+                    logging.info("Skipping article %s due to strange size (%s)", article_id, segment_size)
+                    nzo.increase_bad_articles_counter("bad_articles")
+                else:
+                    raw_article_db[partnum] = (article_id, segment_size)
+                    file_bytes += segment_size
+            except:
+                # In case of missing attributes
+                logging.info("Bad file line %s" % (line))
+                pass
+            continue
+
+        res = fileendre.search(line)
+        if res:
+            #logging.debug("Got file end")
+            # Sort the articles by part number, compatible with Python 3.5
+            raw_article_db_sorted = [raw_article_db[partnum] for partnum in sorted(raw_article_db)]
+
+            # Create NZF
+            nzf = sabnzbd.nzbstuff.NzbFile(file_date, file_name, raw_article_db_sorted, file_bytes, nzo)
+
+            # Check if we already have this exact NZF (see custom eq-checks)
+            if nzf in nzo.files:
+                logging.info("File %s occured twice in NZB, skipping", nzf.filename)
+                continue
+
+            # Add valid NZF's
+            if file_name and nzf.valid and nzf.nzf_id:
+                logging.info("File %s added to queue", nzf.filename)
+                nzo.files.append(nzf)
+                nzo.files_table[nzf.nzf_id] = nzf
+                nzo.bytes += nzf.bytes
+                valid_files += 1
+                avg_age_sum += file_timestamp
+            else:
+                logging.info("Error importing %s, skipping", file_name)
+                if nzf.nzf_id:
+                    sabnzbd.remove_data(nzf.nzf_id, nzo.admin_path)
+                skipped_files += 1
+            continue
+
+        res = filere.search(line)
+        if res:
+            #logging.debug("Got file")
+            raw_article_db = {}
+            file_bytes = 0
+
+            file_name = subjectre.search(res.group(1)).group(1)
+            tmpdate = datere.search(res.group(1))
+            # Don't fail if no date present
+            try:
+                file_date = datetime.datetime.fromtimestamp(int(tmpdate.group(1)))
+                file_timestamp = int(tmpdate.group(1))
+            except:
+                file_date = datetime.datetime.fromtimestamp(time_now)
+                file_timestamp = time_now
+            continue
+
+        res = groupre.search(line)
+        if res:
+            #logging.debug("Got group")
+            if res.group(1) not in nzo.groups:
+                nzo.groups.append(res.group(1))
+
+        res = metare.search(line)
+        if res:
+            #logging.debug("Got meta")
+            meta_type = res.group(1)
+            meta_text = res.group(2)
+            if meta_type and meta_text:
                 # Meta tags can occur multiple times
                 if meta_type not in nzo.meta:
                     nzo.meta[meta_type] = []
-                nzo.meta[meta_type].append(meta.text)
-    logging.debug("NZB Meta-data = %s", nzo.meta)
-
-    # Parse the files
-    for file in nzb_tree.iter("file"):
-        # Get subject and date
-        file_name = ""
-        if file.attrib.get("subject"):
-            file_name = file.attrib.get("subject")
-
-        # Don't fail if no date present
-        try:
-            file_date = datetime.datetime.fromtimestamp(int(file.attrib.get("date")))
-            file_timestamp = int(file.attrib.get("date"))
-        except:
-            file_date = datetime.datetime.fromtimestamp(time_now)
-            file_timestamp = time_now
-
-        # Get group
-        for group in file.iter("group"):
-            if group.text not in nzo.groups:
-                nzo.groups.append(group.text)
-
-        # Get segments
-        raw_article_db = {}
-        file_bytes = 0
-        if file.find("segments"):
-            for segment in file.find("segments").iter("segment"):
-                try:
-                    article_id = segment.text
-                    segment_size = int(segment.attrib.get("bytes"))
-                    partnum = int(segment.attrib.get("number"))
-
-                    # Update hash
-                    md5sum.update(utob(article_id))
-
-                    # Duplicate parts?
-                    if partnum in raw_article_db:
-                        if article_id != raw_article_db[partnum][0]:
-                            logging.info(
-                                "Duplicate part %s, but different ID-s (%s // %s)",
-                                partnum,
-                                raw_article_db[partnum][0],
-                                article_id,
-                            )
-                            nzo.increase_bad_articles_counter("duplicate_articles")
-                        else:
-                            logging.info("Skipping duplicate article (%s)", article_id)
-                    elif segment_size <= 0 or segment_size >= 2 ** 23:
-                        # Perform sanity check (not negative, 0 or larger than 8MB) on article size
-                        # We use this value later to allocate memory in cache and sabyenc
-                        logging.info("Skipping article %s due to strange size (%s)", article_id, segment_size)
-                        nzo.increase_bad_articles_counter("bad_articles")
-                    else:
-                        raw_article_db[partnum] = (article_id, segment_size)
-                        file_bytes += segment_size
-                except:
-                    # In case of missing attributes
-                    pass
-
-        # Sort the articles by part number, compatible with Python 3.5
-        raw_article_db_sorted = [raw_article_db[partnum] for partnum in sorted(raw_article_db)]
-
-        # Create NZF
-        nzf = sabnzbd.nzbstuff.NzbFile(file_date, file_name, raw_article_db_sorted, file_bytes, nzo)
-
-        # Check if we already have this exact NZF (see custom eq-checks)
-        if nzf in nzo.files:
-            logging.info("File %s occured twice in NZB, skipping", nzf.filename)
+                nzo.meta[meta_type].append(meta_text)
             continue
 
-        # Add valid NZF's
-        if file_name and nzf.valid and nzf.nzf_id:
-            logging.info("File %s added to queue", nzf.filename)
-            nzo.files.append(nzf)
-            nzo.files_table[nzf.nzf_id] = nzf
-            nzo.bytes += nzf.bytes
-            valid_files += 1
-            avg_age_sum += file_timestamp
-        else:
-            logging.info("Error importing %s, skipping", file_name)
-            if nzf.nzf_id:
-                sabnzbd.remove_data(nzf.nzf_id, nzo.admin_path)
-            skipped_files += 1
+    logging.debug("NZB Meta-data = %s", nzo.meta)
 
     # Final bookkeeping
     nr_files = max(1, valid_files)
