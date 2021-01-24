@@ -23,7 +23,8 @@ import gzip
 import time
 import logging
 import hashlib
-#import xml.etree.ElementTree
+
+# import xml.etree.ElementTree
 import datetime
 import re
 import io
@@ -50,27 +51,27 @@ def nzbfile_parser(raw_data, nzo):
     valid_files = 0
 
     metare = re.compile('<meta type="(.*?)">(.*?)</meta>')
-    filere = re.compile('<file(.*?)>')
-    fileendre = re.compile('</file>')
+    filere = re.compile("<file(.*?)>")
+    fileendre = re.compile("</file>")
     subjectre = re.compile(' subject="(.*?)"')
     datere = re.compile(' date="(.*?)"')
-    groupre = re.compile('<group>(.*?)</group>')
+    groupre = re.compile("<group>(.*?)</group>")
 
-    segmentre = re.compile('<segment( .*?)>(.*?)</segment>')
+    segmentre = re.compile("<segment( .*?)>(.*?)</segment>")
     bytesre = re.compile(' bytes="(.*?)"')
     numberre = re.compile(' number="(.*?)"')
 
     str_io = io.StringIO(raw_data)
     for line in str_io:
-        #logging.debug("line: %s", line)
+        # logging.debug("line: %s", line)
         res = segmentre.search(line)
         if res:
-            #logging.debug("segment %s, line %s", res.group(2), line)
+            # logging.debug("segment %s, line %s", res.group(2), line)
             try:
                 article_id = res.group(2)
                 segment_size = int(bytesre.search(res.group(1)).group(1))
                 partnum = int(numberre.search(res.group(1)).group(1))
-                #logging.debug("id %s, size %s, number %s", article_id, segment_size, partnum)
+                # logging.debug("id %s, size %s, number %s", article_id, segment_size, partnum)
 
                 # Update hash
                 md5sum.update(utob(article_id))
@@ -103,7 +104,7 @@ def nzbfile_parser(raw_data, nzo):
 
         res = fileendre.search(line)
         if res:
-            #logging.debug("Got file end")
+            # logging.debug("Got file end")
             # Sort the articles by part number, compatible with Python 3.5
             raw_article_db_sorted = [raw_article_db[partnum] for partnum in sorted(raw_article_db)]
 
@@ -132,7 +133,7 @@ def nzbfile_parser(raw_data, nzo):
 
         res = filere.search(line)
         if res:
-            #logging.debug("Got file")
+            # logging.debug("Got file")
             raw_article_db = {}
             file_bytes = 0
 
@@ -149,13 +150,13 @@ def nzbfile_parser(raw_data, nzo):
 
         res = groupre.search(line)
         if res:
-            #logging.debug("Got group")
+            # logging.debug("Got group")
             if res.group(1) not in nzo.groups:
                 nzo.groups.append(res.group(1))
 
         res = metare.search(line)
         if res:
-            #logging.debug("Got meta")
+            # logging.debug("Got meta")
             meta_type = res.group(1)
             meta_text = res.group(2)
             if meta_type and meta_text:
