@@ -26,6 +26,7 @@ import hashlib
 #import xml.etree.ElementTree
 import datetime
 import re
+import io
 
 import sabnzbd
 from sabnzbd import filesystem, nzbstuff
@@ -59,7 +60,8 @@ def nzbfile_parser(raw_data, nzo):
     bytesre = re.compile(' bytes="(.*?)"')
     numberre = re.compile(' number="(.*?)"')
 
-    for line in raw_data.splitlines():
+    str_io = io.StringIO(raw_data)
+    for line in str_io:
         #logging.debug("line: %s", line)
         res = segmentre.search(line)
         if res:
