@@ -23,7 +23,6 @@ import gzip
 import time
 import logging
 import hashlib
-
 import xml.etree.ElementTree
 import datetime
 import re
@@ -170,7 +169,6 @@ def nzbfile_regex_parser(raw_data, nzo):
 
     # In case of failing timestamps and failing files
     time_now = time.time()
-    skipped_files = 0
     valid_files = 0
 
     success = 1
@@ -269,8 +267,7 @@ def nzbfile_regex_parser(raw_data, nzo):
                     raise Exception("Found closing file tag without start at line %s: %s" % (linecount, line))
 
                 if not file_name:
-                    skipped_files += 1
-                    continue
+                    raise Exception("Found closing file tag with no file_name at line %s: %s" % (linecount, line))
 
                 # Sort the articles by part number, compatible with Python 3.5
                 raw_article_db_sorted = [raw_article_db[partnum] for partnum in sorted(raw_article_db)]
@@ -284,19 +281,19 @@ def nzbfile_regex_parser(raw_data, nzo):
                     continue
 
                 # Add valid NZF's
-                if file_name and nzf.valid and nzf.nzf_id:
+                if nzf.valid and nzf.nzf_id:
                     logging.info("File %s added to queue", nzf.filename)
                     nzo.files.append(nzf)
                     nzo.files_table[nzf.nzf_id] = nzf
                     nzo.bytes += nzf.bytes
                     valid_files += 1
                     avg_age_sum += file_timestamp
+                    continue
                 else:
-                    logging.info("Error importing %s, skipping", file_name)
-                    if nzf.nzf_id:
-                        sabnzbd.remove_data(nzf.nzf_id, nzo.admin_path)
-                    skipped_files += 1
-                continue
+                    raise Exception(
+                        "Found closing file tag with invalid nzf (valid %s, nzf_id %s) at line %s: %s"
+                        % (nzf.valid, nzf.nzf_id, linecount, line)
+                    )
 
             # Junk
             res = ignorable_re.search(line)
@@ -371,8 +368,6 @@ def nzbfile_regex_parser(raw_data, nzo):
         nzo.avg_stamp = avg_age_sum / nr_files
         nzo.avg_date = datetime.datetime.fromtimestamp(avg_age_sum / nr_files)
         nzo.md5sum = md5sum.hexdigest()
-        if skipped_files:
-            logging.warning(T("Failed to import %s files from %s"), skipped_files, nzo.filename)
         return True
     else:
         # Remove all data added to the nzo
