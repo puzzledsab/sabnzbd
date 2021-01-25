@@ -191,7 +191,7 @@ def nzbfile_regex_parser(raw_data, nzo):
     encoding_re = re.compile('<\?xml [^>]*encoding="(.*?)"')
     meta_re = re.compile('^\s*<meta type="(.*?)">(.*?)</meta>\s*$')
     nzbtag_re = re.compile("^\s*<nzb xmlns.*?>\s*$")
-    # Can be comments near the end tag
+    # There may be comments near the end tag
     endnzb_re = re.compile(
         "^\s*(?:<!--[^<]*-->|)\s*(?:<!--[^<]*-->|)\s*</nzb>\s*(?:<!--[^<]*-->|)\s*(?:<!--[^<]*-->|)\s*$"
     )
@@ -252,7 +252,9 @@ def nzbfile_regex_parser(raw_data, nzo):
                 elif segment_size <= 0 or segment_size >= 2 ** 23:
                     # Perform sanity check (not negative, 0 or larger than 8MB) on article size
                     # We use this value later to allocate memory in cache and sabyenc
-                    raise Exception("Article %s has strange size (%s)" % (article_id, segment_size))
+                    raise Exception(
+                        "Article %s at line %s has strange size (%s): %s" % (article_id, linecount, segment_size, line)
+                    )
                 else:
                     raw_article_db[partnum] = (article_id, segment_size)
                     file_bytes += segment_size
