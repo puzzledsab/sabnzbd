@@ -36,9 +36,11 @@ from sabnzbd.encoding import utob, correct_unknown_encoding
 from sabnzbd.filesystem import is_archive, get_filename
 from sabnzbd.misc import name_to_cat
 
+
 class RegexException(Exception):
     def __init__(self, message):
         super().__init__(message)
+
 
 def nzbfile_parser(raw_data, nzo):
     # Try regex parser
@@ -258,7 +260,9 @@ def nzbfile_regex_parser(raw_data, nzo):
                 elif segment_size <= 0 or segment_size >= 2 ** 23:
                     # Perform sanity check (not negative, 0 or larger than 8MB) on article size
                     # We use this value later to allocate memory in cache and sabyenc
-                    raise RegexException("Article %s at line %s has strange size (%s): %s" % (article_id, linecount, segment_size, line))
+                    raise RegexException(
+                        "Article %s at line %s has strange size (%s): %s" % (article_id, linecount, segment_size, line)
+                    )
                 else:
                     raw_article_db[partnum] = (article_id, segment_size)
                     file_bytes += segment_size
@@ -310,7 +314,9 @@ def nzbfile_regex_parser(raw_data, nzo):
             res = file_re.search(line)
             if res:
                 if open_file_tag:
-                    raise RegexException("Found open file tag when already in a file at line %s: %s" % (linecount, line))
+                    raise RegexException(
+                        "Found open file tag when already in a file at line %s: %s" % (linecount, line)
+                    )
                 else:
                     open_file_tag = 1
 
