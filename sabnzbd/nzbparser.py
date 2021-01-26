@@ -36,6 +36,9 @@ from sabnzbd.encoding import utob, correct_unknown_encoding
 from sabnzbd.filesystem import is_archive, get_filename
 from sabnzbd.misc import name_to_cat
 
+class RegexException(Exception):
+    def __init__(self, message):
+        super().__init__(message)
 
 def nzbfile_parser(raw_data, nzo):
     # Try regex parser
@@ -173,28 +176,31 @@ def nzbfile_regex_parser(raw_data, nzo):
 
     success = 1
 
+    # Header and end
+    encoding_re = re.compile('<\?xml [^>]*encoding="(.*?)"')
+    meta_re = re.compile('^\s*<meta type="(.*?)">(.*?)</meta>\s*$')
+    nzbtag_re = re.compile("^\s*<nzb xmlns.*?>\s*$")
+    endnzb_re = re.compile(
+        "^\s*(?:<!--[^<]*-->|)\s*(?:<!--[^<]*-->|)\s*</nzb>\s*(?:<!--[^<]*-->|)\s*(?:<!--[^<]*-->|)\s*$"
+    )
+
+    # Main part
     group_re = re.compile("^\s*(?:<groups>\s*|)<group>(.*?)</group>(?:\s*</groups>|)\s*$")
     file_re = re.compile("^\s*<file(.*?)>\s*$")
     fileend_re = re.compile("^\s*</file>\s*$")
     segment_re = re.compile("^\s*<segment( .*?)>(.*?)</segment>\s*$")
-    ignorable_re = re.compile(
-        "^\s*</(segments?|groups|head)>\s*$|^\s*<(groups|segments|head|nzb[^>]*)>\s*$|^\s*<!--.*-->\s*$"
-    )
     whitespace_re = re.compile("^\s*$")
+    ignorable_re = re.compile(
+        "^\s*</(segments?|groups|head)>\s*$|^\s*<(groups|segments|head[^>]*)>\s*$|^\s*<!--[^<]*-->\s*$"
+    )
 
+    # Sub parts of <file>
     subject_re = re.compile(' subject="(.*?)"')
     date_re = re.compile(' date="(.*?)"')
 
+    # Sub parts of <segment>
     bytes_re = re.compile(' bytes="(.*?)"')
     number_re = re.compile(' number="(.*?)"')
-
-    encoding_re = re.compile('<\?xml [^>]*encoding="(.*?)"')
-    meta_re = re.compile('^\s*<meta type="(.*?)">(.*?)</meta>\s*$')
-    nzbtag_re = re.compile("^\s*<nzb xmlns.*?>\s*$")
-    # There may be comments near the end tag
-    endnzb_re = re.compile(
-        "^\s*(?:<!--[^<]*-->|)\s*(?:<!--[^<]*-->|)\s*</nzb>\s*(?:<!--[^<]*-->|)\s*(?:<!--[^<]*-->|)\s*$"
-    )
 
     try:
         reader = io.StringIO(raw_data)
@@ -211,7 +217,7 @@ def nzbfile_regex_parser(raw_data, nzo):
                 continue
             linecount += 1
             if linecount > 10:
-                raise Exception("Could not find <nzb tag in header: %s" % header)
+                raise RegexException("Could not find <nzb tag in header: %s" % header)
             header += line.replace("\n", " ")
             res = nzbtag_re.search(line)
 
@@ -220,7 +226,7 @@ def nzbfile_regex_parser(raw_data, nzo):
         if res:
             encoding = res.group(1)
         else:
-            raise Exception("Could not find encoding in header: %s" % header)
+            raise RegexException("Could not find encoding in header: %s" % header)
 
         # Read the rest of the file
         for line in reader:
@@ -232,7 +238,7 @@ def nzbfile_regex_parser(raw_data, nzo):
             res = segment_re.search(line)
             if res:
                 if not open_file_tag:
-                    raise Exception("Found segment without file tag at line %s: %s" % (linecount, line))
+                    raise RegexException("Found segment without file tag at line %s: %s" % (linecount, line))
                 article_id = res.group(2)
                 segment_size = int(bytes_re.search(res.group(1)).group(1))
                 partnum = int(number_re.search(res.group(1)).group(1))
@@ -243,18 +249,16 @@ def nzbfile_regex_parser(raw_data, nzo):
                 # Duplicate parts?
                 if partnum in raw_article_db:
                     if article_id != raw_article_db[partnum][0]:
-                        raise Exception(
+                        raise RegexException(
                             "Duplicate part %s, but different ID-s (%s // %s)"
                             % (partnum, raw_article_db[partnum][0], article_id)
                         )
                     else:
-                        raise Exception("Duplicate article (%s)" % article_id)
+                        raise RegexException("Duplicate article (%s)" % article_id)
                 elif segment_size <= 0 or segment_size >= 2 ** 23:
                     # Perform sanity check (not negative, 0 or larger than 8MB) on article size
                     # We use this value later to allocate memory in cache and sabyenc
-                    raise Exception(
-                        "Article %s at line %s has strange size (%s): %s" % (article_id, linecount, segment_size, line)
-                    )
+                    raise RegexException("Article %s at line %s has strange size (%s): %s" % (article_id, linecount, segment_size, line))
                 else:
                     raw_article_db[partnum] = (article_id, segment_size)
                     file_bytes += segment_size
@@ -266,10 +270,10 @@ def nzbfile_regex_parser(raw_data, nzo):
                 if open_file_tag:
                     open_file_tag = 0
                 else:
-                    raise Exception("Found closing file tag without start at line %s: %s" % (linecount, line))
+                    raise RegexException("Found closing file tag without start at line %s: %s" % (linecount, line))
 
                 if not file_name:
-                    raise Exception("Found closing file tag with no file_name at line %s: %s" % (linecount, line))
+                    raise RegexException("Found closing file tag with no file_name at line %s: %s" % (linecount, line))
 
                 # Sort the articles by part number, compatible with Python 3.5
                 raw_article_db_sorted = [raw_article_db[partnum] for partnum in sorted(raw_article_db)]
@@ -292,7 +296,7 @@ def nzbfile_regex_parser(raw_data, nzo):
                     avg_age_sum += file_timestamp
                     continue
                 else:
-                    raise Exception(
+                    raise RegexException(
                         "Found closing file tag with invalid nzf (valid %s, nzf_id %s) at line %s: %s"
                         % (nzf.valid, nzf.nzf_id, linecount, line)
                     )
@@ -306,7 +310,7 @@ def nzbfile_regex_parser(raw_data, nzo):
             res = file_re.search(line)
             if res:
                 if open_file_tag:
-                    raise Exception("Found open file tag when already in a fil at line %s: %s" % (linecount, line))
+                    raise RegexException("Found open file tag when already in a file at line %s: %s" % (linecount, line))
                 else:
                     open_file_tag = 1
 
@@ -353,13 +357,13 @@ def nzbfile_regex_parser(raw_data, nzo):
             res = endnzb_re.search(line)
             if res:
                 if open_file_tag:
-                    raise Exception("Found closing <nzb tag while in file at line %s: %s" % (linecount, line))
+                    raise RegexException("Found closing <nzb tag while in file at line %s: %s" % (linecount, line))
                 break
 
             # logging.debug("Line %s: %s", linecount, binascii.hexlify(line.encode()))
-            # raise Exception("Unrecognized line #%s: %s (%s)" % (linecount, line, binascii.hexlify(line.encode())))
-            raise Exception("Unrecognized line #%s: %s" % (linecount, line))
-    except Exception as e:
+            # raise RegexException("Unrecognized line #%s: %s (%s)" % (linecount, line, binascii.hexlify(line.encode())))
+            raise RegexException("Unrecognized line #%s: %s" % (linecount, line))
+    except (RegexException, IndexError, AttributeError) as e:
         logging.warning("Regex parsing of %s failed: %s", nzo.filename, e)
         success = 0
 
