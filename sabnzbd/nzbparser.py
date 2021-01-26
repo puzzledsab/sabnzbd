@@ -23,6 +23,7 @@ import gzip
 import time
 import logging
 import hashlib
+import html
 import xml.etree.ElementTree
 import datetime
 import re
@@ -323,7 +324,7 @@ def nzbfile_regex_parser(raw_data, nzo):
                 raw_article_db = {}
                 file_bytes = 0
 
-                file_name = subject_re.search(res.group(1)).group(1)
+                file_name = html.unescape(subject_re.search(res.group(1)).group(1))
                 tmpdate = date_re.search(res.group(1))
                 # Don't fail if no date present
                 try:
