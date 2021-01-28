@@ -180,30 +180,28 @@ def nzbfile_regex_parser(raw_data, nzo):
     success = 1
 
     # Header and end
-    encoding_re = re.compile('<\?xml [^>]*encoding="(.*?)"')
-    meta_re = re.compile('^\s*<meta type="(.*?)">(.*?)</meta>\s*$')
-    nzbtag_re = re.compile("^\s*<nzb xmlns.*?>\s*$")
+    encoding_re = re.compile('<\?xml [^>]*encoding="([^"]*)"')
+    meta_re = re.compile('^\s*<meta type="([^"]*)">([^<]*)</meta>\s*$')
+    nzbtag_re = re.compile("^\s*<nzb xmlns[^>]*>\s*$")
     endnzb_re = re.compile(
-        "^\s*(?:<!--[^<]*-->|)\s*(?:<!--[^<]*-->|)\s*</nzb>\s*(?:<!--[^<]*-->|)\s*(?:<!--[^<]*-->|)\s*$"
+        "^\s*(?:<!--[^>]*-->|)\s*(?:<!--[^>]*-->|)\s*</nzb>\s*(?:<!--[^>]*-->|)\s*(?:<!--[^>]*-->|)\s*$"
     )
 
     # Main part
-    group_re = re.compile("^\s*(?:<groups>\s*|)<group>(.*?)</group>(?:\s*</groups>|)\s*$")
-    file_re = re.compile("^\s*<file(.*?)>\s*$")
+    group_re = re.compile("^\s*(?:<groups>\s*|)<group>([^<]*)</group>(?:\s*</groups>|)\s*$")
+    file_re = re.compile("^\s*<file([^>]*)>\s*$")
     fileend_re = re.compile("^\s*</file>\s*$")
-    segment_re = re.compile("^\s*<segment( .*?)>(.*?)</segment>\s*$")
+    segment_re = re.compile("^\s*<segment( [^>]*)>([^<]*)</segment>\s*$")
     whitespace_re = re.compile("^\s*$")
-    ignorable_re = re.compile(
-        "^\s*</(segments?|groups|head)>\s*$|^\s*<(groups|segments|head[^>]*)>\s*$|^\s*<!--[^<]*-->\s*$"
-    )
+    ignorable_re = re.compile("^\s*(?:</?segments>|</?groups>|</?head>|<!--[^>]*-->)\s*$")
 
     # Sub parts of <file>
-    subject_re = re.compile(' subject="(.*?)"')
-    date_re = re.compile(' date="(.*?)"')
+    subject_re = re.compile(' subject="([^"]*)"')
+    date_re = re.compile(' date="([^"]*)"')
 
     # Sub parts of <segment>
-    bytes_re = re.compile(' bytes="(.*?)"')
-    number_re = re.compile(' number="(.*?)"')
+    bytes_re = re.compile(' bytes="([^"]*)"')
+    number_re = re.compile(' number="([^"]*)"')
 
     try:
         reader = io.StringIO(raw_data)
@@ -216,9 +214,9 @@ def nzbfile_regex_parser(raw_data, nzo):
         # Read header data until <nzb tag
         while not res:
             line = reader.readline()
+            linecount += 1
             if line == "\n":
                 continue
-            linecount += 1
             if linecount > 10:
                 raise RegexException("Could not find <nzb tag in header: %s" % header)
             header += line.replace("\n", " ")
@@ -233,9 +231,9 @@ def nzbfile_regex_parser(raw_data, nzo):
 
         # Read the rest of the file
         for line in reader:
+            linecount += 1
             if line == "\n":
                 continue
-            linecount += 1
 
             # <segment bytes="100" number="1">articleid</segment>
             res = segment_re.search(line)
@@ -268,6 +266,14 @@ def nzbfile_regex_parser(raw_data, nzo):
                     raw_article_db[partnum] = (article_id, segment_size)
                     file_bytes += segment_size
                     continue
+
+            # <group>a.b.a</group>
+            res = group_re.search(line)
+            if res:
+                # logging.debug("Got group")
+                if res.group(1) not in nzo.groups:
+                    nzo.groups.append(res.group(1))
+                continue
 
             # </file>
             res = fileend_re.search(line)
@@ -306,11 +312,6 @@ def nzbfile_regex_parser(raw_data, nzo):
                         % (nzf.valid, nzf.nzf_id, linecount, line)
                     )
 
-            # Junk
-            res = ignorable_re.search(line)
-            if res:
-                continue
-
             # <file>
             res = file_re.search(line)
             if res:
@@ -335,12 +336,9 @@ def nzbfile_regex_parser(raw_data, nzo):
                     file_timestamp = time_now
                 continue
 
-            # <group>a.b.a</group>
-            res = group_re.search(line)
+            # Junk
+            res = ignorable_re.search(line)
             if res:
-                # logging.debug("Got group")
-                if res.group(1) not in nzo.groups:
-                    nzo.groups.append(res.group(1))
                 continue
 
             # <meta type="password">password123</meta>
