@@ -346,7 +346,7 @@ def nzbfile_regex_parser(raw_data, nzo):
             if res:
                 # logging.debug("Got meta")
                 meta_type = res.group(1)
-                meta_text = res.group(2)
+                meta_text = html.unescape(res.group(2))
                 if meta_type and meta_text:
                     # Meta tags can occur multiple times
                     if meta_type not in nzo.meta:
